@@ -1,35 +1,42 @@
-#include <CMakeTemplateProject/easy_network.hpp>
-#include <CMakeTemplateProject/hello.hpp>
-#include <iostream>
+import std;
+import gal.kumi;
+
+auto get_student(int id)
+{
+	if (id == 0) return gal::make_tuple(3.8, 'A', "Lisa Simpson");
+	else if (id == 1)
+		return gal::make_tuple(2.9, 'C', "Milhouse Van Houten");
+	else if (id == 2)
+		return gal::make_tuple(1.7, 'D', "Ralph Wiggum");
+	else
+		return gal::make_tuple(0., 'F', "Unknown");
+}
 
 auto main() -> int
 {
-	std::cout << "Hello CMakeTemplateProject!"
-			  << "\nCompiler Name: " << CMakeTemplateProject_COMPILER_ID
-			  << "\nCompiler Version: " << CMakeTemplateProject_COMPILER_VERSION
-			  << "\nCTP Version: " << CMakeTemplateProject_VERSION
-			  << "\nAnswer: " << ctp::answer() << '\n'
-			  << "\nMD5 of string [\"CMakeTemplateProject\"]: " << ctp::md5("CMakeTemplateProject") << '\n';
+	auto student0 = get_student(0);
 
-	ctp::log_me();
+	std::cout << "ID: 0, "
+			  << "GPA: " << gal::get<0>(student0) << ", "
+			  << "grade: " << gal::get<1>(student0) << ", "
+			  << "name: " << gal::get<2>(student0) << '\n';
 
-	std::cout << std::boolalpha << ctp::EasyNetwork::https_support_check() << '\n';
+	auto [gpa1, grade1, name1] = get_student(1);
+	std::cout << "ID: 1, "
+			  << "GPA: " << gpa1 << ", "
+			  << "grade: " << grade1 << ", "
+			  << "name: " << name1 << '\n';
+	std::cout << "\n";
 
-	{
-		int	  x{-1};
-		int	  y{-1};
-		int	  channels{-1};
-		auto* data = ctp::load_image(TEST_PNG_FILE_PATH, &x, &y, &channels);
-		std::cout
-				<< "test.png: \n"
-				<< "\tdata: " << static_cast<void*>(data) << '\n'
-				<< "\tx: " << x << '\n'
-				<< "\ty: " << y << '\n'
-				<< "\tchannels: " << channels << '\n';
-		ctp::free_image(data);
-	}
+	auto all_students = gal::make_tuple(get_student(0), get_student(1), get_student(2));
 
-	{
-		std::cout << "fontconfig version: " << ctp::fontconfig_version() << '\n';
-	}
+	gal::for_each_index([](auto i, auto const &m)
+						{ std::cout << "Data #" << i << " : " << m << "\n"; },
+						all_students);
+	std::cout << "\n";
+
+	auto grades = gal::get<0>(gal::transpose(all_students));
+	std::cout << grades << "\n";
+
+	return 0;
 }

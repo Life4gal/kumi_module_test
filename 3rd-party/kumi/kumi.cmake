@@ -1,0 +1,9 @@
+CPMAddPackage(
+		NAME kumi
+		GIT_TAG v3.0
+		GITHUB_REPOSITORY "jfalcou/kumi"
+		OPTIONS "KUMI_BUILD_TEST OFF"
+)
+
+cpm_install(${PROJECT_NAME} kumi PRIVATE kumi::kumi)
+list(APPEND ${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES "kumi 3.0")

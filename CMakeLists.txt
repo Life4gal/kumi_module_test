@@ -1,6 +1,18 @@
-﻿cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.25)
 
-set(PROJECT_NAME_PREFIX "CMakeTemplateProject_")
+if (CMAKE_VERSION VERSION_LESS "3.26")
+	# 3.25
+	set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API "3c375311-a3c9-4396-a187-3227ef642046")
+elseif (CMAKE_VERSION VERSION_LESS "3.27")
+	# 3.26
+	set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API "2182bf5c-ef0d-489a-91da-49dbc3090d2a")
+else ()
+	message(FATAL_ERROR "See `https://github.com/Kitware/CMake/blob/v${CMAKE_VERSION}/Help/dev/experimental.rst`.")
+endif (CMAKE_VERSION VERSION_LESS "3.26")
+# turn on the dynamic depends for ninja
+set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP ON)
+
+set(PROJECT_NAME_PREFIX "KUMI_MODULE_TEST_")
 
 set(
 		${PROJECT_NAME_PREFIX}MAJOR_VERSION
@@ -9,7 +21,7 @@ set(
 
 set(
 		${PROJECT_NAME_PREFIX}MINOR_VERSION
-		2
+		0
 )
 
 set(
@@ -43,10 +55,10 @@ if (${PROJECT_NAME_PREFIX}MASTER_PROJECT AND NOT CMAKE_BUILD_TYPE)
 endif ()
 
 project(
-		CMakeTemplateProject
+		KUMI_MODULE_TEST
 		VERSION ${${PROJECT_NAME_PREFIX}VERSION}
-		DESCRIPTION "CMake Template Project"
-		HOMEPAGE_URL "https://github.com/Life4gal/CMakeTemplateProject"
+		DESCRIPTION "KUMI_MODULE_TEST"
+		HOMEPAGE_URL "https://github.com/Life4gal/kumi_module_test"
 		LANGUAGES CXX
 )
 if (${${PROJECT_NAME_PREFIX}MASTER_PROJECT})
@@ -68,18 +80,18 @@ include(${PROJECT_SOURCE_DIR}/cmake_utils/cpm_install.cmake)
 include(${PROJECT_SOURCE_DIR}/cmake_utils/nuget_install.cmake)
 set(${PROJECT_NAME_PREFIX}3RD_PARTY_PATH ${PROJECT_SOURCE_DIR}/3rd-party)
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 	set(${PROJECT_NAME_PREFIX}PLATFORM_WINDOWS ON)
 	set(${PROJECT_NAME_PREFIX}PLATFORM ${PROJECT_NAME_PREFIX}PLATFORM_WINDOWS)
-elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 	set(${PROJECT_NAME_PREFIX}PLATFORM_LINUX ON)
 	set(${PROJECT_NAME_PREFIX}PLATFORM ${PROJECT_NAME_PREFIX}PLATFORM_LINUX)
-elseif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	set(${PROJECT_NAME_PREFIX}PLATFORM_MACOS ON)
 	set(${PROJECT_NAME_PREFIX}PLATFORM ${PROJECT_NAME_PREFIX}PLATFORM_MACOS)
-else()
+else ()
 	message(FATAL_ERROR "Unsupported Platform: ${CMAKE_SYSTEM_NAME}")
-endif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+endif (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 
 doc_var(
 		${PROJECT_NAME_PREFIX}INSTALL_HEADERS
@@ -185,42 +197,49 @@ else ()
 	set(${PROJECT_NAME_PREFIX}HEADER_ATTRIBUTES)
 endif (${PROJECT_NAME_PREFIX}SYSTEM_HEADERS)
 
-# HEADER FILES
-#file(
-#		GLOB_RECURSE
-#		${PROJECT_NAME_PREFIX}HEADER
-#		CONFIGURE_DEPENDS
-#
-#		${PROJECT_SOURCE_DIR}/include/${PROJECT_NAME}/*.hpp
-#)
-set(
-		${PROJECT_NAME_PREFIX}HEADER
+#====================
+# FIND STD MODULE BEGIN
+#====================
+if (NOT ${PROJECT_NAME_PREFIX}PLATFORM_WINDOWS)
+	message(FATAL_ERROR "This test is only for MSVC :)")
+endif (NOT ${PROJECT_NAME_PREFIX}PLATFORM_WINDOWS)
 
-		${PROJECT_SOURCE_DIR}/include/${PROJECT_NAME}/hello.hpp
-		${PROJECT_SOURCE_DIR}/include/${PROJECT_NAME}/easy_network.hpp
+if (NOT DEFINED ENV{VCToolsInstallDir})
+	message(FATAL_ERROR "Unable to find path to VC Tools in environment variables!")
+endif (NOT DEFINED ENV{VCToolsInstallDir})
+
+if (NOT EXISTS $ENV{VCToolsInstallDir})
+	message(FATAL_ERROR "Invalid VC Tools installation path!")
+else ()
+	message(STATUS "Found VC Tools in: [$ENV{VCToolsInstallDir}]")
+endif (NOT EXISTS $ENV{VCToolsInstallDir})
+
+if (NOT EXISTS $ENV{VCToolsInstallDir}modules/std.ixx)
+	message(FATAL_ERROR "Cannot find std.ixx! Please check MSVC version(${CMAKE_CXX_COMPILER_VERSION})!")
+else ()
+	message(STATUS "Found module std.ixx in: [$ENV{VCToolsInstallDir}modules\\std.ixx]")
+endif (NOT EXISTS $ENV{VCToolsInstallDir}modules/std.ixx)
+
+set(${PROJECT_NAME_PREFIX}TEMP_CXX_MODULE_PATH ${CMAKE_BINARY_DIR}/temp_module)
+configure_file(
+		$ENV{VCToolsInstallDir}modules/std.ixx
+		${${PROJECT_NAME_PREFIX}TEMP_CXX_MODULE_PATH}/std.ixx
+		COPYONLY
 )
 
-# SOURCE FILES
-#file(
-#		GLOB_RECURSE
-#		${PROJECT_NAME_PREFIX}SOURCE
-#		CONFIGURE_DEPENDS
-#
-#		${PROJECT_SOURCE_DIR}/src/*.cpp
-#)
-set(
-		${PROJECT_NAME_PREFIX}SOURCE
-
-		${PROJECT_SOURCE_DIR}/src/hello.cpp
-		${PROJECT_SOURCE_DIR}/src/easy_network.cpp
+set_source_files_properties(
+		${${PROJECT_NAME_PREFIX}TEMP_CXX_MODULE_PATH}/std.ixx
+		PROPERTIES
+		COMPILE_OPTIONS "/Wv:18"
 )
+
+#====================
+# FIND STD MODULE END
+#====================
 
 # LIBRARY
 add_library(
 		${PROJECT_NAME}
-
-		${${PROJECT_NAME_PREFIX}HEADER}
-		${${PROJECT_NAME_PREFIX}SOURCE}
 )
 
 # LIBRARY ALIAS
@@ -228,6 +247,22 @@ add_library(
 		${PROJECT_NAME}::${PROJECT_NAME}
 		ALIAS
 		${PROJECT_NAME}
+)
+
+# MODULE SOURCE
+target_sources(
+		${PROJECT_NAME}
+		PRIVATE
+		FILE_SET module_files
+		TYPE CXX_MODULES
+		BASE_DIRS "${PROJECT_SOURCE_DIR}"
+		FILES
+
+		# std module
+		$<$<CXX_COMPILER_ID:MSVC>:${${PROJECT_NAME_PREFIX}TEMP_CXX_MODULE_PATH}/std.ixx>
+
+		# kumi module
+		${PROJECT_SOURCE_DIR}/src/kumi.ixx
 )
 
 # SET FLAGS
@@ -241,6 +276,9 @@ target_compile_options(
 target_compile_definitions(
 		${PROJECT_NAME}
 		PUBLIC
+
+		# clang-format off
+		# @formatter:off
 
 		${PROJECT_NAME_PREFIX}MAJOR_VERSION=${${PROJECT_NAME_PREFIX}MAJOR_VERSION}
 		${PROJECT_NAME_PREFIX}MINOR_VERSION=${${PROJECT_NAME_PREFIX}MINOR_VERSION}
@@ -260,6 +298,9 @@ target_compile_definitions(
 		$<$<AND:$<CXX_COMPILER_ID:Clang>,$<NOT:$<STREQUAL:"${CMAKE_CXX_SIMULATE_ID}","MSVC">>>:${PROJECT_NAME_PREFIX}COMPILER_CLANG>
 		# apple clang
 		$<$<CXX_COMPILER_ID:AppleClang>:${PROJECT_NAME_PREFIX}COMPILER_APPLE_CLANG>
+
+		# @formatter:on
+		# clang-format on
 )
 # build .dll/.so
 if (BUILD_SHARED_LIBS)
@@ -274,39 +315,33 @@ endif ()
 target_compile_features(
 		${PROJECT_NAME}
 		PUBLIC
-		cxx_std_20
+		cxx_std_23
 )
 
 # SET INCLUDE DIRECTORY
-target_include_directories(
-		${PROJECT_NAME}
-		${${PROJECT_NAME_PREFIX}HEADER_ATTRIBUTES}
-		PUBLIC
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-		$<INSTALL_INTERFACE:${${PROJECT_NAME_PREFIX}INSTALL_HEADERS}/${PROJECT_NAME}-${PROJECT_VERSION}>
-)
-target_include_directories(
-		${PROJECT_NAME}
-		SYSTEM
-		PRIVATE
-		$<BUILD_INTERFACE:${${PROJECT_NAME_PREFIX}TEMP_HEADER_PATH}>
-)
+#target_include_directories(
+#		${PROJECT_NAME}
+#		${${PROJECT_NAME_PREFIX}HEADER_ATTRIBUTES}
+#		PUBLIC
+#		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+#		$<INSTALL_INTERFACE:${${PROJECT_NAME_PREFIX}INSTALL_HEADERS}/${PROJECT_NAME}-${PROJECT_VERSION}>
+#)
+#target_include_directories(
+#		${PROJECT_NAME}
+#		SYSTEM
+#		PRIVATE
+#		$<BUILD_INTERFACE:${${PROJECT_NAME_PREFIX}TEMP_HEADER_PATH}>
+#)
 
 # LINK 3rd-PARTY LIBRARIES
 set(${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES "")
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/fmtlib/fmt.cmake)
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/spdlog/spdlog.cmake)
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/openssl/openssl.cmake)
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/curl/curl.cmake)
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/stb/image.cmake)
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/freetype/freetype.cmake)
-include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/fontconfig/fontconfig.cmake)
+include(${${PROJECT_NAME_PREFIX}3RD_PARTY_PATH}/kumi/kumi.cmake)
 
 message(STATUS "=======================================")
 message(STATUS "[${PROJECT_NAME}] DEPENDENCIES:")
-foreach(DEPENDENCY IN LISTS ${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES)
+foreach (DEPENDENCY IN LISTS ${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES)
 	message(STATUS "-->\t\t ${DEPENDENCY}")
-endforeach(DEPENDENCY IN LISTS ${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES)
+endforeach (DEPENDENCY IN LISTS ${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES)
 message(STATUS "=======================================")
 
 # SET DEBUG POSTFIX ==> lib${PROJECT_NAME} -> Release lib${PROJECT}d -> Debug
@@ -321,150 +356,43 @@ set_target_properties(
 
 # INSTALL TARGETS
 if (${PROJECT_NAME_PREFIX}INSTALL)
-#	include(CMakePackageConfigHelpers)
-#	doc_var(
-#			${PROJECT_NAME_PREFIX}CMAKE_DIR
-#			${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-#			STRING
-#			"Installation directory for cmake files, a relative path that "
-#			"will be joined with ${CMAKE_INSTALL_PREFIX} or an absolute "
-#			"path."
-#	)
-#
-#	set(version_config ${PROJECT_BINARY_DIR}/${PROJECT_NAME}-config-version.cmake)
-#	set(project_config ${PROJECT_BINARY_DIR}/${PROJECT_NAME}-config.cmake)
-#	set(pkgconfig ${PROJECT_BINARY_DIR}/${PROJECT_NAME}.pc)
-#	set(targets_export_name ${PROJECT_NAME}-targets)
-#
-#	doc_var(
-#			${PROJECT_NAME_PREFIX}LIB_DIR
-#			${CMAKE_INSTALL_LIBDIR}
-#			STRING
-#			"Installation directory for libraries, a relative path that "
-#			"will be joined to ${CMAKE_INSTALL_PREFIX} or an absolute path."
-#	)
-#
-#	doc_var(
-#			${PROJECT_NAME_PREFIX}PKGCONFIG_DIR
-#			${CMAKE_INSTALL_LIBDIR}/pkgconfig
-#			PATH
-#			"Installation directory for pkgconfig (.pc) files, a relative "
-#			"path that will be joined with ${CMAKE_INSTALL_PREFIX} or an "
-#			"absolute path."
-#	)
-#
-#	# Generate the version, config and target files into the build directory.
-#	write_basic_package_version_file(
-#			${version_config}
-#			VERSION ${${PROJECT_NAME_PREFIX}VERSION}
-#			COMPATIBILITY AnyNewerVersion
-#	)
-#
-#	# Set ${PROJECT_NAME_PREFIX}LIB_NAME for pkg-config ${PROJECT_NAME}.pc.
-#	# We cannot use the OUTPUT_NAME target
-#	# property because it's not set by default.
-#	set(${PROJECT_NAME_PREFIX}LIB_NAME ${PROJECT_NAME})
-#	if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-#		set(${PROJECT_NAME_PREFIX}LIB_NAME "${${PROJECT_NAME_PREFIX}LIB_NAME}${${PROJECT_NAME_PREFIX}DEBUG_POSTFIX}")
-#	endif ()
-#
-#	# `exec_prefix` and `preifx` defined in `${PROJECT_NAME}-config.pc.in`
-#	set(library_path_for_pc_file "\${exec_prefix}/${${PROJECT_NAME_PREFIX}LIB_DIR}")
-#	set(include_path_for_pc_file "\${prefix}/${${PROJECT_NAME_PREFIX}INSTALL_HEADERS}")
-#
-#	if (EXISTS "${CMAKE_SOURCE_DIR}/cmake_modules/${PROJECT_NAME}.pc.in")
-#		configure_file(
-#				"${CMAKE_SOURCE_DIR}/cmake_modules/${PROJECT_NAME}.pc.in"
-#				"${pkgconfig}"
-#				@ONLY)
-#	else ()
-#		message(FATAL_ERROR "Can't find the configuration file ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}.pc.in!")
-#	endif ()
-#
-#	if (EXISTS "${CMAKE_SOURCE_DIR}/cmake_modules/${PROJECT_NAME}-config.cmake.in")
-#		configure_package_config_file(
-#				${CMAKE_SOURCE_DIR}/cmake_modules/${PROJECT_NAME}-config.cmake.in
-#				${project_config}
-#				INSTALL_DESTINATION ${${PROJECT_NAME_PREFIX}CMAKE_DIR})
-#	else ()
-#		message(FATAL_ERROR "Can't find the configuration file ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}-config.cmake.in!")
-#	endif (EXISTS "${CMAKE_SOURCE_DIR}/cmake_modules/${PROJECT_NAME}-config.cmake.in")
-#
-#	set(INSTALL_TARGETS ${PROJECT_NAME})
-#
-#	# Install the library and headers.
-#	install(
-#			TARGETS ${INSTALL_TARGETS}
-#			EXPORT ${targets_export_name}
-#			LIBRARY DESTINATION ${${PROJECT_NAME_PREFIX}LIB_DIR}
-#			ARCHIVE DESTINATION ${${PROJECT_NAME_PREFIX}LIB_DIR}
-#			PUBLIC_HEADER DESTINATION "${${PROJECT_NAME_PREFIX}INSTALL_HEADERS}/${PROJECT_NAME}"
-#			FRAMEWORK DESTINATION "."
-#			RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-#
-#	# Use a namespace because CMake provides better diagnostics for namespaced
-#	# imported targets.
-#	export(
-#			TARGETS ${INSTALL_TARGETS}
-#			NAMESPACE ${PROJECT_NAME}::
-#			FILE ${PROJECT_BINARY_DIR}/${targets_export_name}.cmake)
-#
-#	# Install version, config and target files.
-#	install(
-#			FILES ${project_config} ${version_config}
-#			DESTINATION ${${PROJECT_NAME_PREFIX}CMAKE_DIR}
-#	)
-#	install(
-#			EXPORT ${targets_export_name}
-#			DESTINATION ${${PROJECT_NAME_PREFIX}CMAKE_DIR}
-#			NAMESPACE ${PROJECT_NAME}::
-#	)
-#	#install(
-#	#		FILES $<TARGET_PDB_FILE:${INSTALL_TARGETS}>
-#	#		DESTINATION ${${PROJECT_NAME_PREFIX}LIB_DIR} OPTIONAL
-#	#)
-#	install(
-#			FILES "${pkgconfig}"
-#			DESTINATION "${${PROJECT_NAME_PREFIX}PKGCONFIG_DIR}"
-#	)
-
-	# PackageProject.cmake will be used to make our target installable
-	CPMAddPackage("gh:TheLartians/PackageProject.cmake@1.10.0")
-
-	# the location where the project's version header will be placed should match the project's regular
-	# header paths
-	string(TOLOWER ${PROJECT_NAME}/version.h VERSION_HEADER_LOCATION)
-
-	packageProject(
-			# the name of the target to export
-			NAME ${PROJECT_NAME}
-			# the version of the target to export
-			VERSION ${PROJECT_VERSION}
-			# (optional) install your library with a namespace (Note: do NOT add extra '::')
-			NAMESPACE ${PROJECT_NAME}
-			# a temporary directory to create the config files
-			BINARY_DIR ${PROJECT_BINARY_DIR}
-			# location of the target's public headers
-			# see target_include_directories -> BUILD_INTERFACE
-			INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include
-			# should match the target's INSTALL_INTERFACE include directory
-			# see target_include_directories -> INSTALL_INTERFACE
-			INCLUDE_DESTINATION ${${PROJECT_NAME_PREFIX}INSTALL_HEADERS}/${PROJECT_NAME}-${PROJECT_VERSION}
-			# (optional) create a header containing the version info
-			# Note: that the path to headers should be lowercase
-			VERSION_HEADER "${VERSION_HEADER_LOCATION}"
-			# (optional) define the project's version compatibility, defaults to `AnyNewerVersion`
-			# supported values: `AnyNewerVersion|SameMajorVersion|SameMinorVersion|ExactVersion`
-			COMPATIBILITY AnyNewerVersion
-			# semicolon separated list of the project's dependencies
-			# see `LINK 3rd-PARTY LIBRARIES`
-			DEPENDENCIES ${${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES}
-			# (optional) option to disable the versioning of install destinations
-			DISABLE_VERSION_SUFFIX YES
-			# (optional) option to ignore target architecture for package resolution
-			# defaults to YES for header only (i.e. INTERFACE) libraries
-			ARCH_INDEPENDENT YES
-	)
+	#	# PackageProject.cmake will be used to make our target installable
+	#	CPMAddPackage("gh:TheLartians/PackageProject.cmake@1.10.0")
+	#
+	#	# the location where the project's version header will be placed should match the project's regular
+	#	# header paths
+	#	string(TOLOWER ${PROJECT_NAME}/version.h VERSION_HEADER_LOCATION)
+	#
+	#	packageProject(
+	#			# the name of the target to export
+	#			NAME ${PROJECT_NAME}
+	#			# the version of the target to export
+	#			VERSION ${PROJECT_VERSION}
+	#			# (optional) install your library with a namespace (Note: do NOT add extra '::')
+	#			NAMESPACE ${PROJECT_NAME}
+	#			# a temporary directory to create the config files
+	#			BINARY_DIR ${PROJECT_BINARY_DIR}
+	#			# location of the target's public headers
+	#			# see target_include_directories -> BUILD_INTERFACE
+	#			INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include
+	#			# should match the target's INSTALL_INTERFACE include directory
+	#			# see target_include_directories -> INSTALL_INTERFACE
+	#			INCLUDE_DESTINATION ${${PROJECT_NAME_PREFIX}INSTALL_HEADERS}/${PROJECT_NAME}-${PROJECT_VERSION}
+	#			# (optional) create a header containing the version info
+	#			# Note: that the path to headers should be lowercase
+	#			VERSION_HEADER "${VERSION_HEADER_LOCATION}"
+	#			# (optional) define the project's version compatibility, defaults to `AnyNewerVersion`
+	#			# supported values: `AnyNewerVersion|SameMajorVersion|SameMinorVersion|ExactVersion`
+	#			COMPATIBILITY AnyNewerVersion
+	#			# semicolon separated list of the project's dependencies
+	#			# see `LINK 3rd-PARTY LIBRARIES`
+	#			DEPENDENCIES ${${PROJECT_NAME_PREFIX}3RD_PARTY_DEPENDENCIES}
+	#			# (optional) option to disable the versioning of install destinations
+	#			DISABLE_VERSION_SUFFIX YES
+	#			# (optional) option to ignore target architecture for package resolution
+	#			# defaults to YES for header only (i.e. INTERFACE) libraries
+	#			ARCH_INDEPENDENT YES
+	#	)
 endif (${PROJECT_NAME_PREFIX}INSTALL)
 
 # DOCUMENTS
@@ -476,5 +404,4 @@ endif (${PROJECT_NAME_PREFIX}DOC)
 if (${PROJECT_NAME_PREFIX}TEST)
 	enable_testing()
 	add_subdirectory(standalone_test)
-	add_subdirectory(unit_test)
 endif (${PROJECT_NAME_PREFIX}TEST)
