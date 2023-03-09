@@ -3,3 +3,115 @@ Life4gal <Life4gal@gmail.com>
 :toc:
 :icons: font
 
+== FILE: kumi.ixx
+[source,c++]
+----
+module;
+
+#include <kumi/tuple.hpp>
+
+export module gal.kumi;
+
+export namespace gal
+{
+	template<typename... Args>
+	[[nodiscard]] constexpr auto make_tuple(Args &&...args) -> decltype(auto)
+	{
+		return kumi::make_tuple(std::forward<Args>(args)...);
+	}
+
+	template<typename T, typename Tuple>
+	[[nodiscard]] constexpr auto get(Tuple &&tuple) -> decltype(auto)
+		requires requires { kumi::get<T>(std::forward<Tuple>(tuple)); }
+	{
+		return kumi::get<T>(std::forward<Tuple>(tuple));
+	}
+
+	template<std::size_t Index, typename Tuple>
+	[[nodiscard]] constexpr auto get(Tuple &&tuple) -> decltype(auto)
+		requires requires { kumi::get<Index>(std::forward<Tuple>(tuple)); }
+	{
+		return kumi::get<Index>(std::forward<Tuple>(tuple));
+	}
+
+	template<typename Function, typename Tuple, typename... Tuples>
+	constexpr auto for_each_index(Function &&function, Tuple &&tuple, Tuples &&...tuples) -> decltype(auto)
+		requires requires { kumi::for_each_index(std::forward<Function>(function), std::forward<Tuple>(tuple), std::forward<Tuples>(tuples)...); }
+	{
+		return kumi::for_each_index(std::forward<Function>(function), std::forward<Tuple>(tuple), std::forward<Tuples>(tuples)...);
+	}
+
+	template<typename Tuple>
+	[[nodiscard]] constexpr auto transpose(const Tuple &tuple) -> decltype(auto)
+		requires requires { kumi::transpose(tuple); }
+	{
+		return kumi::transpose(tuple);
+	}
+}// namespace gal
+----
+
+== FILE: main.cpp
+[source,c++]
+----
+import std;
+import gal.kumi;
+
+auto get_student(int id)
+{
+	if (id == 0) return gal::make_tuple(3.8, 'A', "Lisa Simpson");
+	else if (id == 1)
+		return gal::make_tuple(2.9, 'C', "Milhouse Van Houten");
+	else if (id == 2)
+		return gal::make_tuple(1.7, 'D', "Ralph Wiggum");
+	else
+		return gal::make_tuple(0., 'F', "Unknown");
+}
+
+auto main() -> int
+{
+	auto student0 = get_student(0);
+
+	std::cout << "ID: 0, "
+			  << "GPA: " << gal::get<0>(student0) << ", "
+			  << "grade: " << gal::get<1>(student0) << ", "
+			  << "name: " << gal::get<2>(student0) << '\n';
+
+	auto [gpa1, grade1, name1] = get_student(1);
+	std::cout << "ID: 1, "
+			  << "GPA: " << gpa1 << ", "
+			  << "grade: " << grade1 << ", "
+			  << "name: " << name1 << '\n';
+	std::cout << "\n";
+
+	auto all_students = gal::make_tuple(get_student(0), get_student(1), get_student(2));
+
+	gal::for_each_index([](auto i, auto const &m)
+						{ std::cout << "Data #" << i << " : " << m << "\n"; },
+						all_students);
+	std::cout << "\n";
+
+	auto grades = gal::get<0>(gal::transpose(all_students));
+	std::cout << grades << "\n";
+
+	return 0;
+}
+----
+
+== Compiler Output
+[source,text]
+----
+"C:\Program Files\CMake\bin\cmake.exe" --build C:\workspace\kumi_module_test\out\build\win-x64-Debug-MSVC --target KUMI_MODULE_TEST-standalone-test -j 6
+[0/2] Re-checking globbed directories...
+[1/6] Scanning C:\workspace\kumi_module_test\src\kumi.ixx for CXX dependencies
+kumi.ixx
+[2/6] Generating CXX dyndep file CMakeFiles\KUMI_MODULE_TEST.dir\CXX.dd
+[3/6] Building CXX object CMakeFiles\KUMI_MODULE_TEST.dir\src\kumi.ixx.obj
+kumi.ixx
+[4/6] Linking CXX static library KUMI_MODULE_TESTd.lib
+[5/6] Building CXX object standalone_test\CMakeFiles\KUMI_MODULE_TEST-standalone-test.dir\src\main.cpp.obj
+FAILED: standalone_test/CMakeFiles/KUMI_MODULE_TEST-standalone-test.dir/src/main.cpp.obj
+C:\PROGRA~1\MIB055~1\2022\Preview\VC\Tools\MSVC\1436~1.323\bin\Hostx64\x64\cl.exe  /nologo /TP -DKUMI_MODULE_TEST_COMPILER_ID=\"MSVC\" -DKUMI_MODULE_TEST_COMPILER_MSVC -DKUMI_MODULE_TEST_COMPILER_NAME=\"MSVC.19.36.32323.0\" -DKUMI_MODULE_TEST_COMPILER_VERSION=\"19.36.32323.0\" -DKUMI_MODULE_TEST_MAJOR_VERSION=1 -DKUMI_MODULE_TEST_MINOR_VERSION=0 -DKUMI_MODULE_TEST_PATCH_VERSION=0 -DKUMI_MODULE_TEST_PLATFORM_WINDOWS -DKUMI_MODULE_TEST_VERSION=\"1.0.0\"  /DWIN32 /D_WINDOWS /EHsc /Ob0 /Od /RTC1 -MDd -Zi -std:c++latest /showIncludes @standalone_test\CMakeFiles\KUMI_MODULE_TEST-standalone-test.dir\src\main.cpp.obj.modmap /Fostandalone_test\CMakeFiles\KUMI_MODULE_TEST-standalone-test.dir\src\main.cpp.obj /Fdstandalone_test\CMakeFiles\KUMI_MODULE_TEST-standalone-test.dir\ /FS -c C:\workspace\kumi_module_test\standalone_test\src\main.cpp
+C:\Program Files\Microsoft Visual Studio\2022\Preview\VC\Tools\MSVC\14.36.32323\include\concepts(36): error C7570: 'std::same_as': variable template has already been defined
+C:\Program Files\Microsoft Visual Studio\2022\Preview\VC\Tools\MSVC\14.36.32323\include\concepts(36): note: see declaration of 'std::same_as'
+ninja: build stopped: subcommand failed.
+----
