@@ -262,7 +262,8 @@ target_sources(
 		$<$<CXX_COMPILER_ID:MSVC>:${${PROJECT_NAME_PREFIX}TEMP_CXX_MODULE_PATH}/std.ixx>
 
 		# kumi module
-		${PROJECT_SOURCE_DIR}/src/kumi.ixx
+		#${PROJECT_SOURCE_DIR}/src/kumi.ixx
+		${PROJECT_SOURCE_DIR}/src/inline_kumi.ixx
 )
 
 # SET FLAGS
